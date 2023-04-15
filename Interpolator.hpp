@@ -52,13 +52,73 @@ public:
         std::copy( &dims_[0], &dims_[DomDim], &dims[0] );
     }
     
-    void operator()( const Scal_in * const x_, Scal_out * const y_ )
+    void Evaluate( const Scal_in * const x_, Scal_out * const y_ )
     {
         Read(x_);
         Find();
         Eval();
         Write(y_);
     }
+    
+//    void Evaluate_TensorGrid(
+//        const Scal_in * const * const new_grid_,
+//        const I       * const         new_dims_,
+//             Scal_out * const         values_
+//    )
+//    {
+//        Grid_T  new_grid;
+//        Index_T new_dims;
+//        
+//        std::copy( &new_grid_[0], &new_grid_[DomDim], &new_grid[0] );
+//        std::copy( &new_dims_[0], &new_dims_[DomDim], &new_dims[0] );
+//        
+//        std::array<std::vector<Int>,DomDim> pos;
+//        std::array<std::vector<Scal_out>,DomDim> t_0;
+//        std::array<std::vector<Scal_out>,DomDim> t_1;
+//  
+//        for( Int k = 0; k < DomDim; ++k )
+//        {
+//            const Scal_in * const g_k = new_grid[k];
+//            const Int d_k             = new_dims[k];
+//            
+//            std::vector<Int>        pos_k(d_k);
+//            std::vector<Scal_out>   t_0_k(d_k);
+//            std::vector<Scal_out>   t_1_k(d_k);
+//            
+//            for( Int j = 0; j < d_k; ++j )
+//            {
+//                Find( g_k[j], k );
+//                
+//                pos_k[j] = i[j];
+//                t_0_k[j] = t[0][j];
+//                t_1_k[j] = t[1][j];
+//            }
+//            
+//            std::swap( pos[k], pos_k );
+//            std::swap( t_0[k], t_0_k );
+//            std::swap( t_1[k], t_1_k );
+//        }
+//        
+//        Index_T idx = {0};
+//        
+//        Int pos = 0;
+//        
+////        std::fill( &i[0], &i[DomDim], static_cast<Int>(0) );
+//        
+//        bool good = true;
+//        
+//
+//        while( good )
+//        {
+//            Eval();
+//            
+//            Write( &values_[pos] );
+//            
+//            good = Increment( idx, new_dims );
+//            
+//            pos += AmbDim;
+//        }
+//    }
     
     const Index_T & Index() const
     {
@@ -69,7 +129,7 @@ public:
     {
         if constexpr( DomDim == 1 )
         {
-            return i[0];
+            return idx[0];
         }
         else
         {
@@ -93,7 +153,7 @@ public:
     
     void Write( Scal_out * const y_ ) const
     {
-        std::copy( &y[0], &y[DomDim], &y_[0] );
+        std::copy( &y[0], &y[AmbDim], &y_[0] );
     }
     
     void Eval()
@@ -135,56 +195,59 @@ public:
         }
     }
     
+    void Find( const Scal_in z, const Int k )
+    {
+        const Scal_in * const g = grid[k];
+    
+        Int a = 0;
+        Int b = dims[k]-1;
+        
+        Scal_in g_a = g[a];
+        Scal_in g_b = g[b];
+        
+        if( z < g_a )
+        {
+            i[k]    = 0;
+            t[1][k] = g_a;
+            t[0][k] = g[a+1];
+        }
+        else if ( z > g_b )
+        {
+            i[k]    = b-1;
+            t[1][k] = g[b-1];
+            t[0][k] = g_b;
+        }
+        else
+        {
+            // Binary search
+            while( b > a + 1 )
+            {
+                Int     c   = a + (b-a)/2;
+                Scal_in g_c = g[c];
+                
+                if( z <= g_c )
+                {
+                    b   = c;
+                    g_b = g_c;
+                }
+                else
+                {
+                    a   = c;
+                    g_a = g_c;
+                }
+            }
+        
+            i[k]    = a;
+            t[1][k] = z - g_a;
+            t[0][k] = g_b - z;
+        }
+    }
+        
     void Find()
     {
         for( Int k = 0; k < DomDim; ++k )
         {
-            const Scal_in * const g = grid[k];
-        
-            Int a = 0;
-            Int b = dims[k]-1;
-            
-            Scal_in g_a = g[a];
-            Scal_in g_b = g[b];
-            
-            Scal_in z = x[k];
-            
-            if( z < g_a )
-            {
-                i[k]    = 0;
-                t[1][k] = g_a;
-                t[0][k] = g[a+1];
-            }
-            else if ( z > g_b )
-            {
-                i[k]    = b-1;
-                t[1][k] = g[b-1];
-                t[0][k] = g_b;
-            }
-            else
-            {
-                // Binary search
-                while( b > a + 1 )
-                {
-                    Int     c   = a + (b-a)/2;
-                    Scal_in g_c = g[c];
-                    
-                    if( z <= g_c )
-                    {
-                        b   = c;
-                        g_b = g_c;
-                    }
-                    else
-                    {
-                        a   = c;
-                        g_a = g_c;
-                    }
-                }
-            
-                i[k]    = a;
-                t[1][k] = z - g_a;
-                t[0][k] = g_b - z;
-            }
+            Find( x[k], k );
         }
     }
     
