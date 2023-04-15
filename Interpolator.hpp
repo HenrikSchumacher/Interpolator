@@ -36,6 +36,11 @@ protected:
     mutable Input_T               x = {0};
     mutable Output_T              y = {0};
     
+    
+    mutable std::array<std::vector<Int>,     DomDim> pos;
+    mutable std::array<std::vector<Scal_out>,DomDim> t_0;
+    mutable std::array<std::vector<Scal_out>,DomDim> t_1;
+    
 public:
     
     Interpolator( const Grid_T & grid_, const Index_T & dims_, const Scal_out * const values_ )
@@ -73,15 +78,11 @@ public:
         std::copy( &new_grid_[0], &new_grid_[DomDim], &new_grid[0] );
         std::copy( &new_dims_[0], &new_dims_[DomDim], &new_dims[0] );
 
-        std::array<std::vector<Int>,DomDim> pos;
-        std::array<std::vector<Scal_out>,DomDim> t_0;
-        std::array<std::vector<Scal_out>,DomDim> t_1;
-
         for( Int k = 0; k < DomDim; ++k )
         {
             const Scal_in * const g_k = new_grid[k];
             const Int d_k             = new_dims[k];
-
+            
             std::vector<Int>        pos_k (d_k);
             std::vector<Scal_out>   t_0_k (d_k);
             std::vector<Scal_out>   t_1_k (d_k);
@@ -90,9 +91,9 @@ public:
             {
                 Find( g_k[j], k );
 
-                pos_k[j] = i[j];
-                t_0_k[j] = t[0][j];
-                t_1_k[j] = t[1][j];
+                pos_k[j] = i[k];
+                t_0_k[j] = t[0][k];
+                t_1_k[j] = t[1][k];
             }
 
             std::swap( pos[k], pos_k );
@@ -100,21 +101,15 @@ public:
             std::swap( t_1[k], t_1_k );
         }
 
-        
-        dump(ToString(t_0[0]));
-        dump(ToString(t_1[0]));
-
         Index_T idx = {0};
 
         Int global_idx = 0;
         
         for( Int k = 0; k < DomDim; ++k )
         {
-            const Int idx_k = idx[k];
-            
-            i[k]    = pos[k][idx_k];
-            t[0][k] = t_0[k][idx_k];
-            t[1][k] = t_1[k][idx_k];
+            i[k]    = pos[k][0];
+            t[0][k] = t_0[k][0];
+            t[1][k] = t_1[k][0];
         }
 
         bool good = true;
@@ -126,19 +121,6 @@ public:
             Write( &values_[global_idx] );
 
             good = Increment( idx, new_dims );
-            
-            for( Int k = 0; k < DomDim; ++k )
-            {
-                const Int idx_k = idx[k];
-                
-                i[k]    = pos[k][idx_k];
-                t[0][k] = t_0[k][idx_k];
-                t[1][k] = t_1[k][idx_k];
-                
-                valprint(ToString(k),i[k]);
-                valprint(ToString(k),t[0][k]);
-                valprint(ToString(k),t[1][k]);
-            }
 
             global_idx += AmbDim;
         }
@@ -150,19 +132,26 @@ public:
         
         for( Int k = DomDim; k --> 0; )
         {
-            idx[k] += inc;
+            const Int idx_k = (idx[k] += inc);
             
-            if( idx[k] >= dims_[k] )
+            if( idx_k >= dims_[k] )
             {
                 idx[k] = 0;
                 inc = 1;
+                
+                i[k]    = pos[k][0];
+                t[0][k] = t_0[k][0];
+                t[1][k] = t_1[k][0];
             }
             else
             {
+                i[k]    = pos[k][idx_k];
+                t[0][k] = t_0[k][idx_k];
+                t[1][k] = t_1[k][idx_k];
+                
                 return true;
             }
         }
-        
         
         return false;
     }
@@ -180,16 +169,16 @@ public:
         }
         else
         {
-            Int pos = 0;
+            Int global_idx = 0;
             
             for( Int k = 0; k < DomDim - 1; ++k )
             {
-                pos = (pos + idx[k]) * dims[k+1];
+                global_idx = (global_idx + idx[k]) * dims[k+1];
             }
             
-            pos += idx[DomDim-1];
+            global_idx += idx[DomDim-1];
 
-            return pos;
+            return global_idx;
         }
     }
     
@@ -218,7 +207,7 @@ public:
         
         for( Int kdx = 0; kdx < corner_count; ++kdx )
         {
-            // For each corner of the grid cuboid, we have to find the global position `pos` of the corner in the grid and its coeffcient `coeff`
+            // For each corner of the grid cuboid, we have to find the global position `global_idx` of the corner in the grid and its coeffcient `coeff`
         
             Index_T j = i;
             
@@ -235,13 +224,13 @@ public:
 //            dump(j[0]);
 //            dump(coeff);
             
-            const Int pos = AmbDim * GlobalIndex(j);
+            const Int global_idx = AmbDim * GlobalIndex(j);
             
             auto coeff_converted = static_cast<Scal_out>(coeff);
             
             for( Int k = 0; k < AmbDim; ++k )
             {
-                y[k] += coeff_converted * values[pos+k];
+                y[k] += coeff_converted * values[global_idx+k];
             }
         }
     }
