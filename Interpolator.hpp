@@ -27,8 +27,8 @@ public:
     
 protected:
     
-    Index_T dims;
     Grid_T  grid;
+    Index_T dims;
     const   Scal_out * const      values;
     
     mutable Index_T               i = {0};
@@ -60,65 +60,112 @@ public:
         Write(y_);
     }
     
-//    void Evaluate_TensorGrid(
-//        const Scal_in * const * const new_grid_,
-//        const I       * const         new_dims_,
-//             Scal_out * const         values_
-//    )
-//    {
-//        Grid_T  new_grid;
-//        Index_T new_dims;
-//        
-//        std::copy( &new_grid_[0], &new_grid_[DomDim], &new_grid[0] );
-//        std::copy( &new_dims_[0], &new_dims_[DomDim], &new_dims[0] );
-//        
-//        std::array<std::vector<Int>,DomDim> pos;
-//        std::array<std::vector<Scal_out>,DomDim> t_0;
-//        std::array<std::vector<Scal_out>,DomDim> t_1;
-//  
-//        for( Int k = 0; k < DomDim; ++k )
-//        {
-//            const Scal_in * const g_k = new_grid[k];
-//            const Int d_k             = new_dims[k];
-//            
-//            std::vector<Int>        pos_k(d_k);
-//            std::vector<Scal_out>   t_0_k(d_k);
-//            std::vector<Scal_out>   t_1_k(d_k);
-//            
-//            for( Int j = 0; j < d_k; ++j )
-//            {
-//                Find( g_k[j], k );
-//                
-//                pos_k[j] = i[j];
-//                t_0_k[j] = t[0][j];
-//                t_1_k[j] = t[1][j];
-//            }
-//            
-//            std::swap( pos[k], pos_k );
-//            std::swap( t_0[k], t_0_k );
-//            std::swap( t_1[k], t_1_k );
-//        }
-//        
-//        Index_T idx = {0};
-//        
-//        Int pos = 0;
-//        
-////        std::fill( &i[0], &i[DomDim], static_cast<Int>(0) );
-//        
-//        bool good = true;
-//        
-//
-//        while( good )
-//        {
-//            Eval();
-//            
-//            Write( &values_[pos] );
-//            
-//            good = Increment( idx, new_dims );
-//            
-//            pos += AmbDim;
-//        }
-//    }
+    template<typename I>
+    void Evaluate_TensorGrid(
+        const Scal_in  * const * const new_grid_,
+        const I        * const         new_dims_,
+              Scal_out * const         values_
+    )
+    {
+        Grid_T  new_grid;
+        Index_T new_dims;
+
+        std::copy( &new_grid_[0], &new_grid_[DomDim], &new_grid[0] );
+        std::copy( &new_dims_[0], &new_dims_[DomDim], &new_dims[0] );
+
+        std::array<std::vector<Int>,DomDim> pos;
+        std::array<std::vector<Scal_out>,DomDim> t_0;
+        std::array<std::vector<Scal_out>,DomDim> t_1;
+
+        for( Int k = 0; k < DomDim; ++k )
+        {
+            const Scal_in * const g_k = new_grid[k];
+            const Int d_k             = new_dims[k];
+
+            std::vector<Int>        pos_k (d_k);
+            std::vector<Scal_out>   t_0_k (d_k);
+            std::vector<Scal_out>   t_1_k (d_k);
+
+            for( Int j = 0; j < d_k; ++j )
+            {
+                Find( g_k[j], k );
+
+                pos_k[j] = i[j];
+                t_0_k[j] = t[0][j];
+                t_1_k[j] = t[1][j];
+            }
+
+            std::swap( pos[k], pos_k );
+            std::swap( t_0[k], t_0_k );
+            std::swap( t_1[k], t_1_k );
+        }
+
+        
+        dump(ToString(t_0[0]));
+        dump(ToString(t_1[0]));
+
+        Index_T idx = {0};
+
+        Int global_idx = 0;
+        
+        for( Int k = 0; k < DomDim; ++k )
+        {
+            const Int idx_k = idx[k];
+            
+            i[k]    = pos[k][idx_k];
+            t[0][k] = t_0[k][idx_k];
+            t[1][k] = t_1[k][idx_k];
+        }
+
+        bool good = true;
+
+        while( good )
+        {
+            Eval();
+
+            Write( &values_[global_idx] );
+
+            good = Increment( idx, new_dims );
+            
+            for( Int k = 0; k < DomDim; ++k )
+            {
+                const Int idx_k = idx[k];
+                
+                i[k]    = pos[k][idx_k];
+                t[0][k] = t_0[k][idx_k];
+                t[1][k] = t_1[k][idx_k];
+                
+                valprint(ToString(k),i[k]);
+                valprint(ToString(k),t[0][k]);
+                valprint(ToString(k),t[1][k]);
+            }
+
+            global_idx += AmbDim;
+        }
+    }
+    
+    bool Increment( Index_T & idx, const Index_T & dims_ )
+    {
+        Int inc = 1;
+        
+        for( Int k = DomDim; k --> 0; )
+        {
+            idx[k] += inc;
+            
+            if( idx[k] >= dims_[k] )
+            {
+                idx[k] = 0;
+                inc = 1;
+            }
+            else
+            {
+                return true;
+            }
+        }
+        
+        
+        return false;
+    }
     
     const Index_T & Index() const
     {
@@ -184,6 +231,10 @@ public:
                 coeff *= t[bit][k];
             }
             
+//            dump(i[0]);
+//            dump(j[0]);
+//            dump(coeff);
+            
             const Int pos = AmbDim * GlobalIndex(j);
             
             auto coeff_converted = static_cast<Scal_out>(coeff);
@@ -208,14 +259,15 @@ public:
         if( z < g_a )
         {
             i[k]    = 0;
-            t[1][k] = g_a;
-            t[0][k] = g[a+1];
+            t[1][k] = static_cast<Scal_in>(0);
+            t[0][k] = g_a;
+            
         }
         else if ( z > g_b )
         {
             i[k]    = b-1;
-            t[1][k] = g[b-1];
-            t[0][k] = g_b;
+            t[1][k] = g_b;
+            t[0][k] = static_cast<Scal_in>(0);
         }
         else
         {
