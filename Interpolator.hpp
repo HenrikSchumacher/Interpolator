@@ -220,10 +220,6 @@ public:
                 coeff *= t[bit][k];
             }
             
-//            dump(i[0]);
-//            dump(j[0]);
-//            dump(coeff);
-            
             const Int global_idx = AmbDim * GlobalIndex(j);
             
             auto coeff_converted = static_cast<Scal_out>(coeff);
